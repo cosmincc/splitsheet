@@ -75,6 +75,8 @@ function exportExpenses(expenses) {
   allCells.clearContent();
   allCells.setBackground("white");
   if (!expenses.length) return;
+  const currencyFormat = configSheet.getRange(3, 4).getValue() || '##0.00';
+  sheet.getRangeList(["E3:E", "J3:J", "L3:16", "O3:16", "R3:16", "U16"]).setNumberFormat(currencyFormat);
   const userCurrency = configSheet.getRange(2, 4).getValue();
   const firstCell = 3;
   const expenseRows = [];

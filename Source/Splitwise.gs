@@ -78,11 +78,17 @@ function exportExpenses(expenses) {
   const currencyFormat = configSheet.getRange(3, 4).getValue() || '##0.00';
   sheet.getRangeList(["E3:E", "J3:J", "L3:16", "O3:16", "R3:16", "U16"]).setNumberFormat(currencyFormat);
   const userCurrency = configSheet.getRange(2, 4).getValue();
+  const locale = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetLocale();
+  const useCommaNumberSep = useCommaDecimalSep(locale);
   const firstCell = 3;
   const expenseRows = [];
   const noteRows = [];
   for (const [i, expense] of expenses.entries()) {
-    var cost = expense.cost; //.replace(".", ",");
+    var cost = expense.cost;
+    if (useCommaNumberSep) {
+      // Fix number format for spreadhseet locale.
+      cost = cost.replace('.', ',');
+    }
     if (expense.currency == userCurrency) {
       noteRows.push([null]);
     } else {

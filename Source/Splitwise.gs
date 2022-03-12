@@ -98,7 +98,24 @@ function exportExpenses(expenses) {
     expenseRows.push([expense.date, expense.category, expense.subcategory, expense.description, cost]);
   }
   sheet.getRange(firstCell, 1, expenseRows.length, 5).setValues(expenseRows);
-  sheet.getRange(firstCell, 5, noteRows.length, 1).setNotes(noteRows);
+  const costCells =  sheet.getRange(firstCell, 5, noteRows.length, 1);
+  costCells.setNotes(noteRows);
+
+  // Wait for formulas to load.
+  let values = costCells.getValues().flat();
+  while (values.toString().search('Loading') != -1) {
+    Utilities.sleep(50);
+    values = costCells.getValues().flat();
+  }
+  // Freeze values.
+  costCells.copyTo(costCells, SpreadsheetApp.CopyPasteType.PASTE_VALUES, false);
+  // Update notes with currency exchange rate.
+  for (let [idx, [note]] of noteRows.entries()) {
+    if (note == null) continue;
+    let rate = values[idx] / expenses[idx].cost;
+    noteRows[idx][0] += ` * ${rate} ${userCurrency}/${expenses[idx].currency}`;
+  }
+  costCells.setNotes(noteRows);
 }
 
 // Splitwise API

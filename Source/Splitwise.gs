@@ -1,9 +1,12 @@
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('Splitwise')
-      .addItem('Update','updateExpenses')
+      .addItem('Update Month','updateExpenses')
+      .addItem('Update All','updateExpensesAll')
       .addToUi();
 }
+
+const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function hasServiceAccess() {
   const service = getSplitwiseService();
@@ -17,16 +20,31 @@ function hasServiceAccess() {
 }
 
 function updateExpenses() {
-   if (!hasServiceAccess()) return;
+  if (!hasServiceAccess()) return;
 
-   const categories = getCategories();
-   const tripGroupsIds = getTripGroupsIds();
-   const currentUserId = getCurrentUserId();
-   const expenses = getSheetExpenses();
-   const filteredExpenses = filterExpenses(expenses, currentUserId, categories, tripGroupsIds);
-   const sortedExpenses = sortExpenses(filteredExpenses);
-   exportExpenses(sortedExpenses);
- }
+  const sheet = SpreadsheetApp.getActiveSheet();
+  return updateExpensesSheet(sheet);
+}
+
+function updateExpensesAll() {
+  if (!hasServiceAccess()) return;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  for (var name of monthNames) {
+    var sheet = ss.getSheetByName(name);
+    updateExpensesSheet(sheet);
+  }
+}
+
+function updateExpensesSheet(sheet) {
+  var categories = getCategories();
+  var tripGroupsIds = getTripGroupsIds();
+  var currentUserId = getCurrentUserId();
+  var expenses = getSheetExpenses(sheet);
+  var filteredExpenses = filterExpenses(expenses, currentUserId, categories, tripGroupsIds);
+  var sortedExpenses = sortExpenses(filteredExpenses);
+  exportExpenses(sheet, sortedExpenses);
+}
 
 function filterExpenses(expenses, currentUserId, categories, tripGroupsIds) {
   var expensesToReturn = [];
@@ -69,18 +87,25 @@ function sortExpenses(expenses) {
   return expenses.sort(function(a,b) { return new Date(a.date) - new Date(b.date); });
 }
 
-function exportExpenses(expenses) {
-  const sheet = SpreadsheetApp.getActiveSheet();
+function exportExpenses(sheet, expenses) {
   const allCells = sheet.getRange(3, 1, 197, 5);
   allCells.clearContent();
   allCells.setBackground("white");
   if (!expenses.length) return;
+  const currencyFormat = configSheet.getRange(3, 4).getValue() || '##0.00';
+  sheet.getRangeList(["E3:E", "J3:J", "L3:16", "O3:16", "R3:16", "U16"]).setNumberFormat(currencyFormat);
   const userCurrency = configSheet.getRange(2, 4).getValue();
+  const locale = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetLocale();
+  const useCommaNumberSep = useCommaDecimalSep(locale);
   const firstCell = 3;
   const expenseRows = [];
   const noteRows = [];
   for (const [i, expense] of expenses.entries()) {
-    var cost = expense.cost; //.replace(".", ",");
+    var cost = expense.cost;
+    if (useCommaNumberSep) {
+      // Fix number format for spreadhseet locale.
+      cost = cost.replace('.', ',');
+    }
     if (expense.currency == userCurrency) {
       noteRows.push([null]);
     } else {
@@ -90,11 +115,27 @@ function exportExpenses(expenses) {
     expenseRows.push([expense.date, expense.category, expense.subcategory, expense.description, cost]);
   }
   sheet.getRange(firstCell, 1, expenseRows.length, 5).setValues(expenseRows);
-  sheet.getRange(firstCell, 5, noteRows.length, 1).setNotes(noteRows);
+  const costCells =  sheet.getRange(firstCell, 5, noteRows.length, 1);
+  costCells.setNotes(noteRows);
+
+  // Wait for formulas to load.
+  let values = costCells.getValues().flat();
+  while (values.toString().search('Loading') != -1) {
+    Utilities.sleep(50);
+    values = costCells.getValues().flat();
+  }
+  // Freeze values.
+  costCells.copyTo(costCells, SpreadsheetApp.CopyPasteType.PASTE_VALUES, false);
+  // Update notes with currency exchange rate.
+  for (let [idx, [note]] of noteRows.entries()) {
+    if (note == null) continue;
+    let rate = values[idx] / expenses[idx].cost;
+    noteRows[idx][0] += ` * ${rate} ${userCurrency}/${expenses[idx].currency}`;
+  }
+  costCells.setNotes(noteRows);
 }
 
-function getSheetExpenses() {
-  const sheet = SpreadsheetApp.getActiveSheet();
+function getSheetExpenses(sheet) {
   const from = sheet.getRange(1, 21).getValue();
   const to = sheet.getRange(2, 21).getValue();
   try {

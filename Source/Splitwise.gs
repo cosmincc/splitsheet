@@ -1,9 +1,12 @@
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('Splitwise')
-      .addItem('Update','updateExpenses')
+      .addItem('Update Month','updateExpenses')
+      .addItem('Update All','updateExpensesAll')
       .addToUi();
 }
+
+const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function hasServiceAccess() {
   const service = getSplitwiseService();
@@ -17,16 +20,31 @@ function hasServiceAccess() {
 }
 
 function updateExpenses() {
-   if (!hasServiceAccess()) return;
+  if (!hasServiceAccess()) return;
 
-   const categories = getCategories();
-   const tripGroupsIds = getTripGroupsIds();
-   const currentUserId = getCurrentUserId();
-   const expenses = getExpenses();
-   const filteredExpenses = filterExpenses(expenses, currentUserId, categories, tripGroupsIds);
-   const sortedExpenses = sortExpenses(filteredExpenses);
-   exportExpenses(sortedExpenses);
- }
+  const sheet = SpreadsheetApp.getActiveSheet();
+  return updateExpensesSheet(sheet);
+}
+
+function updateExpensesAll() {
+  if (!hasServiceAccess()) return;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  for (var name of monthNames) {
+    var sheet = ss.getSheetByName(name);
+    updateExpensesSheet(sheet);
+  }
+}
+
+function updateExpensesSheet(sheet) {
+  var categories = getCategories();
+  var tripGroupsIds = getTripGroupsIds();
+  var currentUserId = getCurrentUserId();
+  var expenses = getExpenses(sheet);
+  var filteredExpenses = filterExpenses(expenses, currentUserId, categories, tripGroupsIds);
+  var sortedExpenses = sortExpenses(filteredExpenses);
+  exportExpenses(sheet, sortedExpenses);
+}
 
 function filterExpenses(expenses, currentUserId, categories, tripGroupsIds) {
   var expensesToReturn = [];
@@ -69,8 +87,7 @@ function sortExpenses(expenses) {
   return expenses.sort(function(a,b) { return new Date(a.date) - new Date(b.date); });
 }
 
-function exportExpenses(expenses) {
-  const sheet = SpreadsheetApp.getActiveSheet();
+function exportExpenses(sheet, expenses) {
   const allCells = sheet.getRange(3, 1, 197, 5);
   allCells.clearContent();
   allCells.setBackground("white");
@@ -102,8 +119,7 @@ function exportExpenses(expenses) {
 }
 
 // Splitwise API
-function getExpenses() {
-  const sheet = SpreadsheetApp.getActiveSheet();
+function getExpenses(sheet) {
   const from = sheet.getRange(1, 21).getValue();
   const to = sheet.getRange(2, 21).getValue();
   try {
